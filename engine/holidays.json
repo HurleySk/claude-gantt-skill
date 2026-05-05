@@ -1,0 +1,15 @@
+{
+  "us-federal": [
+    { "name": "New Year's Day", "month": 1, "day": 1, "observed": "nearest-weekday" },
+    { "name": "Martin Luther King Jr. Day", "month": 1, "weekday": 1, "occurrence": 3 },
+    { "name": "Presidents' Day", "month": 2, "weekday": 1, "occurrence": 3 },
+    { "name": "Memorial Day", "month": 5, "weekday": 1, "occurrence": -1 },
+    { "name": "Juneteenth", "month": 6, "day": 19, "observed": "nearest-weekday" },
+    { "name": "Independence Day", "month": 7, "day": 4, "observed": "nearest-weekday" },
+    { "name": "Labor Day", "month": 9, "weekday": 1, "occurrence": 1 },
+    { "name": "Columbus Day", "month": 10, "weekday": 1, "occurrence": 2 },
+    { "name": "Veterans Day", "month": 11, "day": 11, "observed": "nearest-weekday" },
+    { "name": "Thanksgiving", "month": 11, "weekday": 4, "occurrence": 4 },
+    { "name": "Christmas Day", "month": 12, "day": 25, "observed": "nearest-weekday" }
+  ]
+}
