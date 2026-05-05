@@ -194,51 +194,69 @@ function forwardPass(tasks, projectStartDate, workingDays, holidayPresetName) {
   const warnings = [];
 
   for (const task of sorted) {
+    const duration = parseDuration(task.duration);
     let earliestStart;
+    let earliestFinish;
 
     if (task.dependencies.length === 0) {
       earliestStart = nextWorkingDay(startDate, workingDays, holidaySet);
+      earliestFinish = duration === 0 ? earliestStart : addWorkingDays(earliestStart, duration - 1, workingDays, holidaySet);
     } else {
-      let latest = new Date(0);
+      let latestStartConstraint = new Date(startDate);
+      let latestFinishConstraint = new Date(0);
+      let hasFinishConstraint = false;
+
       for (const dep of task.dependencies) {
         const lag = dep.lag ? parseDuration(dep.lag) : 0;
         const type = dep.type || 'FS';
-        let constraintDate;
 
         if (type === 'FS') {
+          // Successor can't start until predecessor finishes (+ lag)
           const predFinish = finishMap.get(dep.id);
-          constraintDate = addDays(predFinish, 1);
-          if (lag > 0) constraintDate = addWorkingDays(predFinish, lag, workingDays, holidaySet);
+          let c = addDays(predFinish, 1);
+          if (lag > 0) c = addWorkingDays(predFinish, lag, workingDays, holidaySet);
+          if (c > latestStartConstraint) latestStartConstraint = c;
         } else if (type === 'SS') {
+          // Successor can't start until predecessor starts (+ lag)
           const predStart = startMap.get(dep.id);
-          constraintDate = new Date(predStart);
-          if (lag > 0) constraintDate = addWorkingDays(predStart, lag, workingDays, holidaySet);
+          let c = new Date(predStart);
+          if (lag > 0) c = addWorkingDays(predStart, lag, workingDays, holidaySet);
+          if (c > latestStartConstraint) latestStartConstraint = c;
         } else if (type === 'FF') {
+          // Successor can't finish until predecessor finishes (+ lag)
           const predFinish = finishMap.get(dep.id);
-          constraintDate = new Date(predFinish);
-          if (lag > 0) constraintDate = addWorkingDays(predFinish, lag, workingDays, holidaySet);
+          let c = new Date(predFinish);
+          if (lag > 0) c = addWorkingDays(predFinish, lag, workingDays, holidaySet);
+          if (c > latestFinishConstraint) latestFinishConstraint = c;
+          hasFinishConstraint = true;
         } else if (type === 'SF') {
+          // Successor can't finish until predecessor starts (+ lag)
           const predStart = startMap.get(dep.id);
-          constraintDate = addDays(predStart, 1);
-          if (lag > 0) constraintDate = addWorkingDays(predStart, lag, workingDays, holidaySet);
+          let c = new Date(predStart);
+          if (lag > 0) c = addWorkingDays(predStart, lag, workingDays, holidaySet);
+          if (c > latestFinishConstraint) latestFinishConstraint = c;
+          hasFinishConstraint = true;
         }
-
-        if (constraintDate > latest) latest = constraintDate;
       }
-      earliestStart = nextWorkingDay(latest, workingDays, holidaySet);
+
+      // Compute earliest start from start constraints
+      earliestStart = nextWorkingDay(latestStartConstraint, workingDays, holidaySet);
+      earliestFinish = duration === 0 ? earliestStart : addWorkingDays(earliestStart, duration - 1, workingDays, holidaySet);
+
+      // If finish constraints push the finish later, back-calculate start
+      if (hasFinishConstraint) {
+        const requiredFinish = nextWorkingDay(latestFinishConstraint, workingDays, holidaySet);
+        if (requiredFinish > earliestFinish) {
+          earliestFinish = requiredFinish;
+          earliestStart = duration === 0 ? earliestFinish : subtractWorkingDays(earliestFinish, duration - 1, workingDays, holidaySet);
+        }
+      }
     }
 
-    const duration = parseDuration(task.duration);
     task.start = formatDate(earliestStart);
+    task.finish = formatDate(earliestFinish);
     startMap.set(task.id, earliestStart);
-
-    if (duration === 0) {
-      task.finish = task.start;
-    } else {
-      const finishDate = addWorkingDays(earliestStart, duration - 1, workingDays, holidaySet);
-      task.finish = formatDate(finishDate);
-    }
-    finishMap.set(task.id, parseDate(task.finish));
+    finishMap.set(task.id, earliestFinish);
   }
 
   return { tasks: sorted, warnings };
@@ -275,18 +293,50 @@ function criticalPath(tasks, projectStartDate, workingDays, holidayPresetName) {
     }
   }
 
+  const taskMap = new Map(scheduled.map(t => [t.id, t]));
   const reversed = [...scheduled].reverse();
   for (const t of reversed) {
     const successors = adj.get(t.id);
     if (successors.length > 0) {
-      let minLf = new Date(8640000000000000);
+      let constrainedLf = new Date(8640000000000000);
+      let constrainedLs = new Date(8640000000000000);
+
       for (const sId of successors) {
-        const sLateStart = latestStart.get(sId);
-        const predLf = prevWorkingDay(addDays(sLateStart, -1), workingDays, holidaySet);
-        if (predLf < minLf) minLf = predLf;
+        const successor = taskMap.get(sId);
+        const dep = successor.dependencies.find(d => d.id === t.id);
+        const type = (dep && dep.type) || 'FS';
+        const sLs = latestStart.get(sId);
+        const sLf = latestFinish.get(sId);
+
+        if (type === 'FS') {
+          // Predecessor must finish before successor starts
+          const c = prevWorkingDay(addDays(sLs, -1), workingDays, holidaySet);
+          if (c < constrainedLf) constrainedLf = c;
+        } else if (type === 'SS') {
+          // Predecessor must start before/when successor starts
+          const c = new Date(sLs);
+          if (c < constrainedLs) constrainedLs = c;
+        } else if (type === 'FF') {
+          // Predecessor must finish before/when successor finishes
+          const c = new Date(sLf);
+          if (c < constrainedLf) constrainedLf = c;
+        } else if (type === 'SF') {
+          // Predecessor must start before/when successor finishes
+          const c = new Date(sLf);
+          if (c < constrainedLs) constrainedLs = c;
+        }
       }
-      if (minLf < latestFinish.get(t.id)) {
-        latestFinish.set(t.id, minLf);
+
+      if (constrainedLf < latestFinish.get(t.id)) {
+        latestFinish.set(t.id, constrainedLf);
+      }
+      // For SS/SF constraints on start, back-calculate latest finish
+      const dur = parseDuration(t.duration);
+      if (constrainedLs < new Date(8640000000000000)) {
+        const impliedLf = dur === 0 ? constrainedLs : addWorkingDays(constrainedLs, dur - 1, workingDays, holidaySet);
+        if (impliedLf < latestFinish.get(t.id)) {
+          latestFinish.set(t.id, impliedLf);
+        }
       }
     }
 
@@ -353,14 +403,23 @@ function feasibility(project) {
 
   const deadline = parseDate(project.project.deadline);
   const finish = parseDate(cp.projectFinish);
-  const diffMs = deadline - finish;
-  const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+
+  const startDate = parseDate(project.project.startDate);
+  const endEstimate = addDays(startDate, 365 * 3);
+  const holidaySet = getHolidaySet(project.project.holidays, project.project.startDate, formatDate(endEstimate));
+
+  let floatDays;
+  if (finish <= deadline) {
+    floatDays = countWorkingDays(finish, deadline, project.project.workingDays, holidaySet);
+  } else {
+    floatDays = -countWorkingDays(deadline, finish, project.project.workingDays, holidaySet);
+  }
 
   return {
     feasible: finish <= deadline,
     projectFinish: cp.projectFinish,
     deadline: project.project.deadline,
-    floatDays: diffDays,
+    floatDays,
     criticalTaskCount: cp.criticalTaskCount,
     criticalTasks: cp.criticalTasks.map(t => ({ id: t.id, name: t.name, start: t.start, finish: t.finish })),
   };

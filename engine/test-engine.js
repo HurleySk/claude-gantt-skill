@@ -149,6 +149,108 @@ const t3task = cp.result.tasks.find(t => t.id === 'T3');
 assert('T3 is critical', t3task.critical, true);
 
 // ============================================================
+// SS Dependency Type
+// ============================================================
+console.log('\n=== SS Dependency ===');
+
+const ssProject = {
+  project: { name: 'SS Test', startDate: '2026-06-01', deadline: '2026-07-31', workingDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'], holidays: 'us-federal', assumptions: [] },
+  tasks: [
+    { id: 'T1', name: 'Task 1', phase: 'A', duration: '5d', start: null, finish: null, milestone: false, dependencies: [], notes: '', status: 'not_started' },
+    { id: 'T2', name: 'Task 2 (SS on T1)', phase: 'A', duration: '3d', start: null, finish: null, milestone: false, dependencies: [{ id: 'T1', type: 'SS', lag: '0d' }], notes: '', status: 'not_started' },
+  ],
+};
+
+const ssSeq = run({ command: 'sequence', project: JSON.parse(JSON.stringify(ssProject)) });
+assert('SS sequence succeeds', ssSeq.ok, true);
+// SS: T2 starts when T1 starts. T1 starts Jun 1. T2 starts Jun 1, 3d -> finishes Jun 3
+assert('SS T2 start = T1 start', ssSeq.result.project.tasks[1].start, '2026-06-01');
+assert('SS T2 finish', ssSeq.result.project.tasks[1].finish, '2026-06-03');
+
+// SS with lag: T2 starts 2d after T1 starts
+const ssLagProject = JSON.parse(JSON.stringify(ssProject));
+ssLagProject.tasks[1].dependencies[0].lag = '2d';
+const ssLag = run({ command: 'sequence', project: ssLagProject });
+assert('SS+lag succeeds', ssLag.ok, true);
+// T1 starts Jun 1. T2 starts 2 working days after Jun 1 = Jun 3. 3d -> Jun 5
+assert('SS+lag T2 start', ssLag.result.project.tasks[1].start, '2026-06-03');
+assert('SS+lag T2 finish', ssLag.result.project.tasks[1].finish, '2026-06-05');
+
+// ============================================================
+// FF Dependency Type
+// ============================================================
+console.log('\n=== FF Dependency ===');
+
+const ffProject = {
+  project: { name: 'FF Test', startDate: '2026-06-01', deadline: '2026-07-31', workingDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'], holidays: 'us-federal', assumptions: [] },
+  tasks: [
+    { id: 'T1', name: 'Task 1', phase: 'A', duration: '5d', start: null, finish: null, milestone: false, dependencies: [], notes: '', status: 'not_started' },
+    { id: 'T2', name: 'Task 2 (FF on T1)', phase: 'A', duration: '3d', start: null, finish: null, milestone: false, dependencies: [{ id: 'T1', type: 'FF', lag: '0d' }], notes: '', status: 'not_started' },
+  ],
+};
+
+const ffSeq = run({ command: 'sequence', project: JSON.parse(JSON.stringify(ffProject)) });
+assert('FF sequence succeeds', ffSeq.ok, true);
+// FF: T2 can't finish before T1 finishes. T1 finishes Jun 5. T2 is 3d.
+// T2 must finish >= Jun 5. Back-calculate: start = Jun 3, finish = Jun 5
+assert('FF T2 start', ffSeq.result.project.tasks[1].start, '2026-06-03');
+assert('FF T2 finish', ffSeq.result.project.tasks[1].finish, '2026-06-05');
+
+// ============================================================
+// SF Dependency Type
+// ============================================================
+console.log('\n=== SF Dependency ===');
+
+const sfProject = {
+  project: { name: 'SF Test', startDate: '2026-06-01', deadline: '2026-07-31', workingDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'], holidays: 'us-federal', assumptions: [] },
+  tasks: [
+    { id: 'T1', name: 'Task 1', phase: 'A', duration: '5d', start: null, finish: null, milestone: false, dependencies: [], notes: '', status: 'not_started' },
+    { id: 'T2', name: 'Task 2 (SF on T1)', phase: 'A', duration: '3d', start: null, finish: null, milestone: false, dependencies: [{ id: 'T1', type: 'SF', lag: '0d' }], notes: '', status: 'not_started' },
+  ],
+};
+
+const sfSeq = run({ command: 'sequence', project: JSON.parse(JSON.stringify(sfProject)) });
+assert('SF sequence succeeds', sfSeq.ok, true);
+// SF: T2 can't finish before T1 starts. T1 starts Jun 1. T2 is 3d.
+// T2 must finish >= Jun 1. Back-calculate: With no other constraints, T2 starts Jun 1 (project start),
+// finishes Jun 3. Since Jun 1 >= Jun 1, constraint is satisfied. But T2 also has no start constraint
+// pushing it later, so it starts at project start = Jun 1.
+assert('SF T2 start', sfSeq.result.project.tasks[1].start, '2026-06-01');
+assert('SF T2 finish', sfSeq.result.project.tasks[1].finish, '2026-06-03');
+
+// ============================================================
+// Mixed Dependency Types
+// ============================================================
+console.log('\n=== Mixed Dependencies ===');
+
+const mixedProject = {
+  project: { name: 'Mixed', startDate: '2026-06-01', deadline: '2026-07-31', workingDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'], holidays: 'us-federal', assumptions: [] },
+  tasks: [
+    { id: 'T1', name: 'Predecessor', phase: 'A', duration: '5d', start: null, finish: null, milestone: false, dependencies: [], notes: '', status: 'not_started' },
+    { id: 'T2', name: 'FS successor', phase: 'A', duration: '3d', start: null, finish: null, milestone: false, dependencies: [{ id: 'T1', type: 'FS', lag: '0d' }], notes: '', status: 'not_started' },
+    { id: 'T3', name: 'SS successor', phase: 'A', duration: '10d', start: null, finish: null, milestone: false, dependencies: [{ id: 'T1', type: 'SS', lag: '0d' }], notes: '', status: 'not_started' },
+    { id: 'M1', name: 'End', phase: 'A', duration: '0d', start: null, finish: null, milestone: true, dependencies: [{ id: 'T2', type: 'FS', lag: '0d' }, { id: 'T3', type: 'FS', lag: '0d' }], notes: '', status: 'not_started' },
+  ],
+};
+
+const mixed = run({ command: 'sequence', project: JSON.parse(JSON.stringify(mixedProject)) });
+assert('mixed sequence succeeds', mixed.ok, true);
+// T1: Jun 1-5. T2 (FS): Jun 8-10. T3 (SS on T1): starts Jun 1, 10d = Jun 1-12 (skip Juneteenth? No, Jun 12).
+// Actually 10 working days from Jun 1: Jun 1-5 (5d), Jun 8-12 (5d) = Jun 12.
+assert('mixed T3 start', mixed.result.project.tasks[2].start, '2026-06-01');
+assert('mixed T3 finish', mixed.result.project.tasks[2].finish, '2026-06-12');
+// M1 waits for both T2 (Jun 10) and T3 (Jun 12). Max = Jun 12. M1 = Jun 15 (next working day)
+assert('mixed M1 start', mixed.result.project.tasks[3].start, '2026-06-15');
+
+// Critical path should be T1->T3->M1 (longer than T1->T2->M1)
+const mixedCp = run({ command: 'critical-path', project: JSON.parse(JSON.stringify(mixedProject)) });
+assert('mixed CP succeeds', mixedCp.ok, true);
+const mixedT3 = mixedCp.result.tasks.find(t => t.id === 'T3');
+assert('mixed T3 is critical', mixedT3.critical, true);
+const mixedT2 = mixedCp.result.tasks.find(t => t.id === 'T2');
+assert('mixed T2 is not critical', mixedT2.critical, false);
+
+// ============================================================
 // Circular Dependency Detection
 // ============================================================
 console.log('\n=== Circular Dependency ===');

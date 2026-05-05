@@ -25,12 +25,6 @@ Read `gantt-project.json` from the working directory. If it doesn't exist, tell 
 Run the engine to resolve all dependencies and compute dates:
 
 ```bash
-cat gantt-project.json | node "$ENGINE" --stdin
-```
-
-Actually, pipe the project JSON as a command object:
-
-```bash
 echo '{"command":"sequence","project":<gantt-project.json content>}' | node "$ENGINE"
 ```
 
