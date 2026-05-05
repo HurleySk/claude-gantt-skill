@@ -1,0 +1,13 @@
+{
+  "name": "gantt",
+  "version": "1.0.0",
+  "description": "Project management skills — conversational planning with iterative discovery, deterministic date sequencing with US federal holiday awareness, dependency tracking, critical path analysis, and optional MS Project sync via mpp-mcp.",
+  "author": {
+    "name": "Samuel Hurley",
+    "url": "https://github.com/HurleySk"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/HurleySk/claude-gantt-skill",
+  "repository": "https://github.com/HurleySk/claude-gantt-skill",
+  "keywords": ["project-management", "gantt", "scheduling", "dependencies", "critical-path", "holidays", "mpp", "ms-project", "planning", "wbs"]
+}
