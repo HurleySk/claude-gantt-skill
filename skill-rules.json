@@ -1,0 +1,34 @@
+[
+  {
+    "id": "gantt-plan-suggest",
+    "skill": "gantt:plan",
+    "triggers": ["project plan", "project init", "new project", "wbs", "work breakdown", "kickoff", "project scope"],
+    "enforcement": "suggest",
+    "sessionOnce": true,
+    "message": "Use /gantt:plan for guided project planning with iterative discovery"
+  },
+  {
+    "id": "gantt-schedule-suggest",
+    "skill": "gantt:schedule",
+    "triggers": ["timeline", "schedule", "sequencing", "critical path", "dependencies", "milestone", "deadline", "feasibility"],
+    "enforcement": "suggest",
+    "sessionOnce": true,
+    "message": "Use /gantt:schedule for date sequencing and dependency analysis"
+  },
+  {
+    "id": "gantt-sync-suggest",
+    "skill": "gantt:sync",
+    "triggers": ["mpp", "ms project", "microsoft project", "export project", "sync project"],
+    "enforcement": "suggest",
+    "sessionOnce": true,
+    "message": "Use /gantt:sync to push/pull between gantt-project.json and .mpp"
+  },
+  {
+    "id": "gantt-json-guard",
+    "skill": "gantt:schedule",
+    "triggers": ["gantt-project.json"],
+    "enforcement": "warn",
+    "toolEvent": "PreToolUse:Edit",
+    "message": "Editing gantt-project.json directly may break dependency integrity. Use /gantt:schedule to modify tasks safely."
+  }
+]
