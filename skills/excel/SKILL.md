@@ -595,6 +595,8 @@ mcp__excel-mcp__range(action: 'set-values', session_id: '<id>', sheet_name: 'She
 
 **CRITICAL: Row-number map must account for summary rows.** After inserting summary rows, the row numbers shift. Build the `taskId → rowNumber` map AFTER constructing the full row list (summaries + tasks). Row 1 = first data row (whether summary or task), etc.
 
+**SELF-REFERENCE CHECK:** After building all predecessor strings, verify that no task references its own row number. A predecessor of `"10"` on row 10 is a self-reference and will cause a circular dependency error in Project. This is the most common off-by-one bug when summary rows shift the numbering.
+
 Example with 3 phases and 6 tasks:
 ```
 Row 1: "Phase A"         (summary, level 1)
