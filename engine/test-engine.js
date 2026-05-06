@@ -177,6 +177,54 @@ assert('SS+lag T2 start', ssLag.result.project.tasks[1].start, '2026-06-03');
 assert('SS+lag T2 finish', ssLag.result.project.tasks[1].finish, '2026-06-05');
 
 // ============================================================
+// FS+lag Dependency
+// ============================================================
+console.log('\n=== FS+lag Dependency ===');
+
+const fsLagProject = {
+  project: { name: 'FS Lag', startDate: '2026-06-01', deadline: '2026-07-31', workingDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'], holidays: 'us-federal', assumptions: [] },
+  tasks: [
+    { id: 'T1', name: 'Task 1', phase: 'A', duration: '5d', start: null, finish: null, milestone: false, dependencies: [], notes: '', status: 'not_started' },
+    { id: 'T2', name: 'Task 2 (FS+1d)', phase: 'A', duration: '3d', start: null, finish: null, milestone: false, dependencies: [{ id: 'T1', type: 'FS', lag: '1d' }], notes: '', status: 'not_started' },
+  ],
+};
+
+const fsLag1 = run({ command: 'sequence', project: JSON.parse(JSON.stringify(fsLagProject)) });
+assert('FS+1d succeeds', fsLag1.ok, true);
+// T1: Jun 1 (Mon) -> Jun 5 (Fri). FS+0d would start Jun 8 (Mon). +1d lag = Jun 9 (Tue).
+assert('FS+1d T2 start', fsLag1.result.project.tasks[1].start, '2026-06-09');
+assert('FS+1d T2 finish', fsLag1.result.project.tasks[1].finish, '2026-06-11');
+
+// FS+2d
+const fsLag2Project = JSON.parse(JSON.stringify(fsLagProject));
+fsLag2Project.tasks[1].dependencies[0].lag = '2d';
+const fsLag2 = run({ command: 'sequence', project: fsLag2Project });
+assert('FS+2d succeeds', fsLag2.ok, true);
+// FS+0d = Jun 8. +2d = Jun 10 (Wed). 3d -> Jun 12 (Fri)
+assert('FS+2d T2 start', fsLag2.result.project.tasks[1].start, '2026-06-10');
+assert('FS+2d T2 finish', fsLag2.result.project.tasks[1].finish, '2026-06-12');
+
+// FS+4d
+const fsLag4Project = JSON.parse(JSON.stringify(fsLagProject));
+fsLag4Project.tasks[1].dependencies[0].lag = '4d';
+fsLag4Project.tasks[1].duration = '1d';
+const fsLag4 = run({ command: 'sequence', project: fsLag4Project });
+assert('FS+4d succeeds', fsLag4.ok, true);
+// FS+0d = Jun 8. +4d = Jun 12 (Fri). 1d -> Jun 12
+assert('FS+4d T2 start', fsLag4.result.project.tasks[1].start, '2026-06-12');
+assert('FS+4d T2 finish', fsLag4.result.project.tasks[1].finish, '2026-06-12');
+
+// FS+lag critical path — both tasks should be critical with float=0
+const fsLagCp = run({ command: 'critical-path', project: JSON.parse(JSON.stringify(fsLag2Project)) });
+assert('FS+lag CP succeeds', fsLagCp.ok, true);
+const cpT1 = fsLagCp.result.tasks.find(t => t.id === 'T1');
+const cpT2 = fsLagCp.result.tasks.find(t => t.id === 'T2');
+assert('FS+lag T1 is critical', cpT1.critical, true);
+assert('FS+lag T2 is critical', cpT2.critical, true);
+assert('FS+lag T1 float=0', cpT1.float, 0);
+assert('FS+lag T2 float=0', cpT2.float, 0);
+
+// ============================================================
 // FF Dependency Type
 // ============================================================
 console.log('\n=== FF Dependency ===');

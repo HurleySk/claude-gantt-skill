@@ -214,7 +214,10 @@ function forwardPass(tasks, projectStartDate, workingDays, holidayPresetName) {
           // Successor can't start until predecessor finishes (+ lag)
           const predFinish = finishMap.get(dep.id);
           let c = addDays(predFinish, 1);
-          if (lag > 0) c = addWorkingDays(predFinish, lag, workingDays, holidaySet);
+          if (lag > 0) {
+            c = nextWorkingDay(c, workingDays, holidaySet);
+            c = addWorkingDays(c, lag, workingDays, holidaySet);
+          }
           if (c > latestStartConstraint) latestStartConstraint = c;
         } else if (type === 'SS') {
           // Successor can't start until predecessor starts (+ lag)
@@ -305,24 +308,25 @@ function criticalPath(tasks, projectStartDate, workingDays, holidayPresetName) {
         const successor = taskMap.get(sId);
         const dep = successor.dependencies.find(d => d.id === t.id);
         const type = (dep && dep.type) || 'FS';
+        const lag = dep && dep.lag ? parseDuration(dep.lag) : 0;
         const sLs = latestStart.get(sId);
         const sLf = latestFinish.get(sId);
 
         if (type === 'FS') {
-          // Predecessor must finish before successor starts
-          const c = prevWorkingDay(addDays(sLs, -1), workingDays, holidaySet);
+          let c = prevWorkingDay(addDays(sLs, -1), workingDays, holidaySet);
+          if (lag > 0) c = subtractWorkingDays(c, lag, workingDays, holidaySet);
           if (c < constrainedLf) constrainedLf = c;
         } else if (type === 'SS') {
-          // Predecessor must start before/when successor starts
-          const c = new Date(sLs);
+          let c = new Date(sLs);
+          if (lag > 0) c = subtractWorkingDays(c, lag, workingDays, holidaySet);
           if (c < constrainedLs) constrainedLs = c;
         } else if (type === 'FF') {
-          // Predecessor must finish before/when successor finishes
-          const c = new Date(sLf);
+          let c = new Date(sLf);
+          if (lag > 0) c = subtractWorkingDays(c, lag, workingDays, holidaySet);
           if (c < constrainedLf) constrainedLf = c;
         } else if (type === 'SF') {
-          // Predecessor must start before/when successor finishes
-          const c = new Date(sLf);
+          let c = new Date(sLf);
+          if (lag > 0) c = subtractWorkingDays(c, lag, workingDays, holidaySet);
           if (c < constrainedLs) constrainedLs = c;
         }
       }
