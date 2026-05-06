@@ -462,15 +462,51 @@ function dispatch(input) {
   }
 }
 
+function parseArgs(argv) {
+  const args = {};
+  for (let i = 2; i < argv.length; i++) {
+    if (argv[i] === '--file' && argv[i + 1]) args.file = argv[++i];
+    else if (argv[i] === '--command' && argv[i + 1]) args.command = argv[++i];
+    else if (argv[i] === '--out' && argv[i + 1]) args.out = argv[++i];
+  }
+  return args;
+}
+
+function run(input, outPath) {
+  const result = dispatch(input);
+  const wrapped = result.ok !== undefined ? result : { ok: true, result };
+  if (outPath) {
+    const projectData = wrapped.ok && wrapped.result && wrapped.result.project
+      ? wrapped.result.project
+      : wrapped;
+    fs.writeFileSync(outPath, JSON.stringify(projectData, null, 2), 'utf-8');
+    console.log(JSON.stringify({ ok: true, wrote: outPath }));
+  } else {
+    console.log(JSON.stringify(wrapped, null, 2));
+  }
+}
+
 function main() {
+  const args = parseArgs(process.argv);
+
+  if (args.file) {
+    try {
+      const project = JSON.parse(fs.readFileSync(args.file, 'utf-8'));
+      const input = args.command ? { command: args.command, project } : project;
+      run(input, args.out);
+    } catch (e) {
+      console.log(JSON.stringify({ ok: false, error: e.message }));
+    }
+    return;
+  }
+
   let inputData = '';
   process.stdin.setEncoding('utf-8');
   process.stdin.on('data', chunk => { inputData += chunk; });
   process.stdin.on('end', () => {
     try {
       const input = JSON.parse(inputData);
-      const result = dispatch(input);
-      console.log(JSON.stringify(result.ok !== undefined ? result : { ok: true, result }, null, 2));
+      run(input, args.out);
     } catch (e) {
       console.log(JSON.stringify({ ok: false, error: e.message }));
     }
