@@ -520,7 +520,7 @@ MS Project can open this file via File → Open → select the .xlsx. The Import
 
 These rules are non-negotiable — violating any one causes import errors:
 
-1. **Use Project's exact field names**: `Name` (not "Task Name"), `Duration`, `Start`, `Finish`, `Predecessors`, `Notes`
+1. **Use Project's exact field names**: `Name` (not "Task Name"), `Duration`, `Start`, `Finish`, `Predecessors`, `Outline Level`, `Notes`
 2. **No ID column** — Project auto-generates IDs from row order
 3. **Dates MUST be real Excel date values**, not text strings. Use `=DATE(year,month,day)` formulas via `set-formulas`, never pass date strings via `set-values`
 4. **Date display format**: `m/d/yyyy` (US locale safe). Set via `set-number-format`
@@ -534,17 +534,18 @@ These rules are non-negotiable — violating any one causes import errors:
 
 | Aspect | `push` | `push-for-project` |
 |--------|--------|---------------------|
-| Headers | `ID, Task Name, Phase, Duration, Start, Finish, Dependencies, Status, Notes` | `Name, Duration, Start, Finish, Predecessors, Notes` |
+| Headers | `ID, Task Name, Phase, Duration, Start, Finish, Dependencies, Status, Notes` | `Name, Duration, Start, Finish, Predecessors, Outline Level, Notes` |
 | ID column | Task IDs (`T1`, `M1`) | None (Project auto-generates) |
 | Dep format | `T1, T3 SS +1d` | `1,3SS+1d` (row numbers) |
 | Dates | Text strings via `set-values` | `=DATE()` formulas via `set-formulas` |
 | Date display | `yyyy-mm-dd` | `m/d/yyyy` |
-| Phase column | Included | Omitted (not a Project field) |
+| Phase column | Included as data column | Converted to summary rows (Outline Level 1) |
 | Status column | `in_progress` | Omitted (set % Complete manually in Project) |
 | Excel Table | Yes (`GanttSchedule`) | No (raw range) |
 | Sheet name | `Schedule` | `Sheet1` (don't rename) |
 | Gantt Chart sheet | Yes | No (Project generates its own) |
 | Project Info sheet | Yes | No (keep single sheet, minimal) |
+| Task grouping | Flat list | Hierarchical (summary rows + Outline Level) |
 
 #### Step 1: Ensure dates are computed
 
@@ -568,30 +569,57 @@ mcp__excel-mcp__file(action: 'create', path: '<absolute-path>', show: <true if w
 mcp__excel-mcp__calculation_mode(action: 'set-mode', session_id: '<id>', mode: 'Manual')
 ```
 
-#### Step 5: Write text data (headers + non-date columns)
+#### Step 5: Build row data with summary rows and outline levels
 
-**Headers:** `['Name', 'Duration', 'Start', 'Finish', 'Predecessors', 'Notes']`
+**Headers:** `['Name', 'Duration', 'Start', 'Finish', 'Predecessors', 'Outline Level', 'Notes']`
 
 Write headers:
 ```
-mcp__excel-mcp__range(action: 'set-values', session_id: '<id>', sheet_name: 'Sheet1', range_address: 'A1:F1', values: [['Name', 'Duration', 'Start', 'Finish', 'Predecessors', 'Notes']])
+mcp__excel-mcp__range(action: 'set-values', session_id: '<id>', sheet_name: 'Sheet1', range_address: 'A1:G1', values: [['Name', 'Duration', 'Start', 'Finish', 'Predecessors', 'Outline Level', 'Notes']])
 ```
 
-**Build a task ID → row number map.** Tasks appear in the same order as `gantt-project.json`. First task = row number 1, second = 2, etc.
+**Build the row list with phase summary rows inserted.** Walk through the task array and track the current phase. When the phase changes, insert a summary row before the first task in the new phase.
 
-Write Name (col A), Duration (col B), Predecessors (col E), Notes (col F) via `set-values`:
+**Summary rows (Outline Level 1):**
+- Name = phase name (e.g., "Active Dev & Validation")
+- Duration = blank (Project auto-calculates from children)
+- Start = blank (Project auto-calculates)
+- Finish = blank (Project auto-calculates)
+- Predecessors = blank
+- Outline Level = `1`
+- Notes = blank
+
+**Task rows (Outline Level 2):**
+- All task data as normal
+- Outline Level = `2`
+
+**CRITICAL: Row-number map must account for summary rows.** After inserting summary rows, the row numbers shift. Build the `taskId → rowNumber` map AFTER constructing the full row list (summaries + tasks). Row 1 = first data row (whether summary or task), etc.
+
+Example with 3 phases and 6 tasks:
 ```
-mcp__excel-mcp__range(action: 'set-values', session_id: '<id>', sheet_name: 'Sheet1', range_address: 'A2:B{N+1}', values: [[name, duration], ...])
-mcp__excel-mcp__range(action: 'set-values', session_id: '<id>', sheet_name: 'Sheet1', range_address: 'E2:F{N+1}', values: [[predecessors, notes], ...])
+Row 1: "Phase A"         (summary, level 1)
+Row 2: "Task 1"          (task, level 2)  → predecessors reference row 2
+Row 3: "Task 2"          (task, level 2)  → predecessors reference row 3
+Row 4: "Phase B"         (summary, level 1)
+Row 5: "Task 3"          (task, level 2)  → predecessors reference row 5
+...
 ```
+
+Write all non-date columns via `set-values`:
+```
+mcp__excel-mcp__range(action: 'set-values', session_id: '<id>', sheet_name: 'Sheet1', range_address: 'A2:B{totalRows+1}', values: [[name, duration], ...])
+mcp__excel-mcp__range(action: 'set-values', session_id: '<id>', sheet_name: 'Sheet1', range_address: 'E2:G{totalRows+1}', values: [[predecessors, outlineLevel, notes], ...])
+```
+
+For summary rows, Duration is `""` (empty string). For tasks, Duration is `"15d"` etc.
 
 **Predecessor serialization** (MS Project format — row-number based):
-- Look up each dependency's task ID in the row-number map
-- FS + 0 lag: just the row number → `"1"`
-- FS + non-zero lag: `"1FS+2d"` (include type when lag present)
-- Non-FS + 0 lag: `"1SS"` (type concatenated, no space)
-- Non-FS + non-zero lag: `"1SS+2d"`
-- Multiple predecessors: comma-separated → `"1,3SS+1d"`
+- Look up each dependency's task ID in the row-number map (accounting for summary rows)
+- FS + 0 lag: just the row number → `"2"`
+- FS + non-zero lag: `"2FS+2d"` (include type when lag present)
+- Non-FS + 0 lag: `"2SS"` (type concatenated, no space)
+- Non-FS + non-zero lag: `"2SS+2d"`
+- Multiple predecessors: comma-separated → `"2,5SS+1d"`
 
 **Task name cleanup:** Replace em dashes (`—`) with plain hyphens (`-`). Avoid special Unicode characters.
 
@@ -599,25 +627,30 @@ mcp__excel-mcp__range(action: 'set-values', session_id: '<id>', sheet_name: 'She
 
 **CRITICAL:** Dates must be written via `set-formulas` using `=DATE(year,month,day)` so Excel stores them as real date serial numbers. Never pass date strings through `set-values` — Project will reject text dates.
 
+**Summary rows get blank dates** — leave their Start/Finish cells empty. Project auto-calculates summary dates from child tasks. Only write `=DATE()` formulas for task rows (Outline Level 2).
+
+Write date formulas for task rows only (skip summary rows):
 ```
-mcp__excel-mcp__range(action: 'set-formulas', session_id: '<id>', sheet_name: 'Sheet1', range_address: 'C2:D{N+1}', formulas: [['=DATE(2026,5,6)', '=DATE(2026,5,27)'], ...])
+mcp__excel-mcp__range(action: 'set-formulas', session_id: '<id>', sheet_name: 'Sheet1', range_address: 'C{taskRow}:D{taskRow}', formulas: [['=DATE(2026,5,6)', '=DATE(2026,5,27)']])
 ```
 
-Format date columns:
+Repeat for each task row. Summary rows are left blank in columns C and D.
+
+Format all date cells (including blank summary rows — formatting won't hurt):
 ```
-mcp__excel-mcp__range(action: 'set-number-format', session_id: '<id>', sheet_name: 'Sheet1', range_address: 'C2:D{N+1}', format_code: 'm/d/yyyy')
+mcp__excel-mcp__range(action: 'set-number-format', session_id: '<id>', sheet_name: 'Sheet1', range_address: 'C2:D{totalRows+1}', format_code: 'm/d/yyyy')
 ```
 
 #### Step 7: Format
 
 Bold header row:
 ```
-mcp__excel-mcp__range_format(action: 'format-range', session_id: '<id>', sheet_name: 'Sheet1', range_address: 'A1:F1', bold: true)
+mcp__excel-mcp__range_format(action: 'format-range', session_id: '<id>', sheet_name: 'Sheet1', range_address: 'A1:G1', bold: true)
 ```
 
 Auto-fit and set minimum width on Name column:
 ```
-mcp__excel-mcp__range_format(action: 'auto-fit-columns', session_id: '<id>', sheet_name: 'Sheet1', range_address: 'A:F')
+mcp__excel-mcp__range_format(action: 'auto-fit-columns', session_id: '<id>', sheet_name: 'Sheet1', range_address: 'A:G')
 mcp__excel-mcp__range_format(action: 'set-column-width', session_id: '<id>', sheet_name: 'Sheet1', range_address: 'A:A', column_width: 40)
 ```
 
