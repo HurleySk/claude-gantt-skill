@@ -24,6 +24,14 @@
     "message": "Use /gantt:sync to push/pull between gantt-project.json and .mpp"
   },
   {
+    "id": "gantt-excel-suggest",
+    "skill": "gantt:excel",
+    "triggers": ["excel", "xlsx", "spreadsheet", "export excel", "excel export", "excel import", "gantt chart excel"],
+    "enforcement": "suggest",
+    "sessionOnce": true,
+    "message": "Use /gantt:excel to push/pull between gantt-project.json and Excel"
+  },
+  {
     "id": "gantt-json-guard",
     "skill": "gantt:schedule",
     "triggers": ["gantt-project.json"],
