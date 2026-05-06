@@ -529,6 +529,7 @@ These rules are non-negotiable — violating any one causes import errors:
 7. **Keep Sheet1** as the tab name — don't rename. Project defaults to Sheet1
 8. **Duration format**: `"15d"` works (explicit unit). `"0d"` for milestones
 9. **No em dashes or special characters** in task names — use plain hyphens
+10. **Do NOT write Start/Finish dates for tasks with predecessors** — Project treats imported dates as "Start No Earlier Than" constraints that conflict with predecessor-driven scheduling. Only root tasks (no predecessors) get a Start date to anchor the schedule. Dependent tasks get Duration + Predecessors only.
 
 #### Differences from `push`
 
@@ -625,20 +626,28 @@ For summary rows, Duration is `""` (empty string). For tasks, Duration is `"15d"
 
 **Task name cleanup:** Replace em dashes (`—`) with plain hyphens (`-`). Avoid special Unicode characters.
 
-#### Step 6: Write dates as formulas
+#### Step 6: Write dates as formulas (root tasks only)
 
 **CRITICAL:** Dates must be written via `set-formulas` using `=DATE(year,month,day)` so Excel stores them as real date serial numbers. Never pass date strings through `set-values` — Project will reject text dates.
 
-**Summary rows get blank dates** — leave their Start/Finish cells empty. Project auto-calculates summary dates from child tasks. Only write `=DATE()` formulas for task rows (Outline Level 2).
+**Date writing rules by row type:**
 
-Write date formulas for task rows only (skip summary rows):
+| Row type | Start (col C) | Finish (col D) | Why |
+|----------|--------------|----------------|-----|
+| Summary row (Outline Level 1) | blank | blank | Project auto-calculates from children |
+| Root task (no predecessors) | `=DATE()` formula | blank | Anchors the schedule; Finish computed from Duration |
+| Dependent task (has predecessors) | blank | blank | Project computes from predecessors + Duration |
+
+A **root task** is any task where `task.dependencies` is an empty array. A task with ANY dependency (FS, SS, FF, SF, with or without lag) is a **dependent task** and gets no dates. Writing dates alongside predecessors causes Project to treat them as constraints that conflict with predecessor-driven scheduling (see import rule 10).
+
+Write Start date formulas for root tasks only (skip summary rows AND dependent tasks):
 ```
-mcp__excel-mcp__range(action: 'set-formulas', session_id: '<id>', sheet_name: 'Sheet1', range_address: 'C{taskRow}:D{taskRow}', formulas: [['=DATE(2026,5,6)', '=DATE(2026,5,27)']])
+mcp__excel-mcp__range(action: 'set-formulas', session_id: '<id>', sheet_name: 'Sheet1', range_address: 'C{taskRow}', formulas: [['=DATE(2026,5,6)']])
 ```
 
-Repeat for each task row. Summary rows are left blank in columns C and D.
+Repeat for each root task row. All other cells in columns C and D are left empty.
 
-Format all date cells (including blank summary rows — formatting won't hurt):
+Format all date cells (formatting empty cells is harmless — if Project later computes dates, they'll display correctly):
 ```
 mcp__excel-mcp__range(action: 'set-number-format', session_id: '<id>', sheet_name: 'Sheet1', range_address: 'C2:D{totalRows+1}', format_code: 'm/d/yyyy')
 ```
@@ -668,7 +677,7 @@ Screenshot for verification:
 mcp__excel-mcp__screenshot(action: 'capture-sheet', session_id: '<id>', sheet_name: 'Sheet1', quality: 'Medium')
 ```
 
-Present screenshot to user. Verify: no ID column, real dates (not text), Predecessors with row numbers.
+Present screenshot to user. Verify: no ID column, root tasks have Start dates, dependent tasks have blank date cells, Predecessors with row numbers.
 
 ```
 mcp__excel-mcp__window(action: 'clear-status-bar', session_id: '<id>')
