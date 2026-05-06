@@ -1,6 +1,6 @@
 {
   "name": "gantt",
-  "version": "1.1.4",
+  "version": "1.1.5",
   "description": "Project management skills — conversational planning with iterative discovery, deterministic date sequencing with US federal holiday awareness, dependency tracking, critical path analysis, MS Project sync via mpp-mcp, and Excel export/import via excel-mcp.",
   "author": {
     "name": "Samuel Hurley",
