@@ -514,19 +514,37 @@ Report: "Template created at [path]. Fill in your tasks and project info, then r
 
 Export `gantt-project.json` to an `.xlsx` workbook formatted for **direct import into Microsoft Project**. Default path: `./<project-name>-for-project.xlsx`.
 
-MS Project can open this file via File → Open and will recognize the column names, predecessor format, and outline levels natively.
+MS Project can open this file via File → Open → select the .xlsx. The Import Wizard will auto-map columns when headers match Project's exact field names.
+
+#### Critical MS Project import rules (from Microsoft docs)
+
+These rules are non-negotiable — violating any one causes import errors:
+
+1. **Use Project's exact field names**: `Name` (not "Task Name"), `Duration`, `Start`, `Finish`, `Predecessors`, `Notes`
+2. **No ID column** — Project auto-generates IDs from row order
+3. **Dates MUST be real Excel date values**, not text strings. Use `=DATE(year,month,day)` formulas via `set-formulas`, never pass date strings via `set-values`
+4. **Date display format**: `m/d/yyyy` (US locale safe). Set via `set-number-format`
+5. **No Excel Table** — raw data range only. Project handles structured tables inconsistently
+6. **No blank rows** in the data block — the wizard stops at the first blank row
+7. **Keep Sheet1** as the tab name — don't rename. Project defaults to Sheet1
+8. **Duration format**: `"15d"` works (explicit unit). `"0d"` for milestones
+9. **No em dashes or special characters** in task names — use plain hyphens
 
 #### Differences from `push`
 
 | Aspect | `push` | `push-for-project` |
 |--------|--------|---------------------|
-| ID column | Task IDs (`T1`, `M1`) | Row numbers (`1`, `2`, `3`) |
-| Dependencies header | `Dependencies` | `Predecessors` |
-| Dep format | `T1, T3 SS +1d` | `1,3SS+1d` |
-| Status column | `Status` (`in_progress`) | `% Complete` (`0`, `50`, `100`) |
-| Extra column | — | `Outline Level` |
-| Excel Table | Yes (`GanttSchedule`) | No (raw range — Project handles tables inconsistently) |
+| Headers | `ID, Task Name, Phase, Duration, Start, Finish, Dependencies, Status, Notes` | `Name, Duration, Start, Finish, Predecessors, Notes` |
+| ID column | Task IDs (`T1`, `M1`) | None (Project auto-generates) |
+| Dep format | `T1, T3 SS +1d` | `1,3SS+1d` (row numbers) |
+| Dates | Text strings via `set-values` | `=DATE()` formulas via `set-formulas` |
+| Date display | `yyyy-mm-dd` | `m/d/yyyy` |
+| Phase column | Included | Omitted (not a Project field) |
+| Status column | `in_progress` | Omitted (set % Complete manually in Project) |
+| Excel Table | Yes (`GanttSchedule`) | No (raw range) |
+| Sheet name | `Schedule` | `Sheet1` (don't rename) |
 | Gantt Chart sheet | Yes | No (Project generates its own) |
+| Project Info sheet | Yes | No (keep single sheet, minimal) |
 
 #### Step 1: Ensure dates are computed
 
@@ -534,105 +552,76 @@ Same as `push` — check for `start: null`, run sequence if needed.
 
 #### Step 2: Agent mode
 
-Same as `push`.
+Same as `push`. Default to background for < 5 tasks.
 
-#### Step 3: Create or open file
+#### Step 3: Create file
 
-Same as `push`.
+```
+mcp__excel-mcp__file(action: 'create', path: '<absolute-path>', show: <true if watch mode>)
+```
+
+**Do NOT rename Sheet1.** Leave the default tab name.
 
 #### Step 4: Set manual calculation
 
-Same as `push`.
-
-#### Step 5: Create sheets
-
 ```
-mcp__excel-mcp__worksheet(action: 'rename', session_id: '<id>', old_name: 'Sheet1', new_name: 'Schedule')
-mcp__excel-mcp__worksheet(action: 'create', session_id: '<id>', sheet_name: 'Project Info')
+mcp__excel-mcp__calculation_mode(action: 'set-mode', session_id: '<id>', mode: 'Manual')
 ```
 
-#### Step 6: Build and write schedule data
+#### Step 5: Write text data (headers + non-date columns)
 
-**Headers:** `['ID', 'Task Name', 'Duration', 'Start', 'Finish', 'Predecessors', '% Complete', 'Outline Level', 'Notes']`
+**Headers:** `['Name', 'Duration', 'Start', 'Finish', 'Predecessors', 'Notes']`
 
-**Build a task ID → row number map** before serializing. Tasks appear in the same order as `gantt-project.json`. The first task is row number 1, second is 2, etc. (Row numbers are 1-based, matching the data rows in Excel — header is row 0 in the array but row 1 in the sheet.)
+Write headers:
+```
+mcp__excel-mcp__range(action: 'set-values', session_id: '<id>', sheet_name: 'Sheet1', range_address: 'A1:F1', values: [['Name', 'Duration', 'Start', 'Finish', 'Predecessors', 'Notes']])
+```
 
-**ID column**: Use the row number (1, 2, 3...), not the task ID.
+**Build a task ID → row number map.** Tasks appear in the same order as `gantt-project.json`. First task = row number 1, second = 2, etc.
 
-**Predecessor serialization** (MS Project format):
+Write Name (col A), Duration (col B), Predecessors (col E), Notes (col F) via `set-values`:
+```
+mcp__excel-mcp__range(action: 'set-values', session_id: '<id>', sheet_name: 'Sheet1', range_address: 'A2:B{N+1}', values: [[name, duration], ...])
+mcp__excel-mcp__range(action: 'set-values', session_id: '<id>', sheet_name: 'Sheet1', range_address: 'E2:F{N+1}', values: [[predecessors, notes], ...])
+```
+
+**Predecessor serialization** (MS Project format — row-number based):
 - Look up each dependency's task ID in the row-number map
 - FS + 0 lag: just the row number → `"1"`
-- FS + non-zero lag: `"1+2d"` (no space before `+`)
+- FS + non-zero lag: `"1FS+2d"` (include type when lag present)
 - Non-FS + 0 lag: `"1SS"` (type concatenated, no space)
 - Non-FS + non-zero lag: `"1SS+2d"`
-- Multiple predecessors: comma-separated, no spaces → `"1,3SS+1d"`
+- Multiple predecessors: comma-separated → `"1,3SS+1d"`
 
-**% Complete mapping**:
-- `not_started` → `0`
-- `in_progress` → `50`
-- `completed` → `100`
+**Task name cleanup:** Replace em dashes (`—`) with plain hyphens (`-`). Avoid special Unicode characters.
 
-**Outline Level**: Assign based on phase grouping. Track the current phase — each time the phase changes, that's a new group. All tasks get outline level `2`. Optionally, you could insert phase summary rows at level `1`, but this complicates the row-number mapping. Simpler: just set all tasks to level `1` (flat) and let the user indent in Project if desired.
+#### Step 6: Write dates as formulas
+
+**CRITICAL:** Dates must be written via `set-formulas` using `=DATE(year,month,day)` so Excel stores them as real date serial numbers. Never pass date strings through `set-values` — Project will reject text dates.
 
 ```
-mcp__excel-mcp__range(action: 'set-values', session_id: '<id>', sheet_name: 'Schedule', range_address: 'A1:I{N+1}', values: [[headers], [row1], ...])
+mcp__excel-mcp__range(action: 'set-formulas', session_id: '<id>', sheet_name: 'Sheet1', range_address: 'C2:D{N+1}', formulas: [['=DATE(2026,5,6)', '=DATE(2026,5,27)'], ...])
 ```
 
-**Do NOT create an Excel Table.** MS Project's import wizard handles structured tables inconsistently.
+Format date columns:
+```
+mcp__excel-mcp__range(action: 'set-number-format', session_id: '<id>', sheet_name: 'Sheet1', range_address: 'C2:D{N+1}', format_code: 'm/d/yyyy')
+```
 
-#### Step 7: Format columns
+#### Step 7: Format
 
 Bold header row:
 ```
-mcp__excel-mcp__range_format(action: 'format-range', session_id: '<id>', sheet_name: 'Schedule', range_address: 'A1:I1', bold: true, fill_color: '#4472C4', font_color: '#FFFFFF')
+mcp__excel-mcp__range_format(action: 'format-range', session_id: '<id>', sheet_name: 'Sheet1', range_address: 'A1:F1', bold: true)
 ```
 
-Date columns:
+Auto-fit and set minimum width on Name column:
 ```
-mcp__excel-mcp__range(action: 'set-number-format', session_id: '<id>', sheet_name: 'Schedule', range_address: 'D2:E{N+1}', format_code: 'yyyy-mm-dd')
-```
-
-Auto-fit then set minimum widths:
-```
-mcp__excel-mcp__range_format(action: 'auto-fit-columns', session_id: '<id>', sheet_name: 'Schedule', range_address: 'A:I')
-mcp__excel-mcp__range_format(action: 'set-column-width', session_id: '<id>', sheet_name: 'Schedule', range_address: 'B:B', column_width: 40)
-mcp__excel-mcp__range_format(action: 'set-column-width', session_id: '<id>', sheet_name: 'Schedule', range_address: 'I:I', column_width: 30)
+mcp__excel-mcp__range_format(action: 'auto-fit-columns', session_id: '<id>', sheet_name: 'Sheet1', range_address: 'A:F')
+mcp__excel-mcp__range_format(action: 'set-column-width', session_id: '<id>', sheet_name: 'Sheet1', range_address: 'A:A', column_width: 40)
 ```
 
-Wrap text on Notes:
-```
-mcp__excel-mcp__range_format(action: 'format-range', session_id: '<id>', sheet_name: 'Schedule', range_address: 'I2:I{N+1}', wrap_text: true)
-```
-
-#### Step 8: Conditional formatting
-
-Milestones (duration = "0d"):
-```
-mcp__excel-mcp__conditionalformat(action: 'add-rule', session_id: '<id>', sheet_name: 'Schedule', range_address: 'A2:I{N+1}', rule_type: 'expression', formula1: '=$C2="0d"', interior_color: '#FFF2CC')
-```
-
-Completed (100%):
-```
-mcp__excel-mcp__conditionalformat(action: 'add-rule', session_id: '<id>', sheet_name: 'Schedule', range_address: 'A2:I{N+1}', rule_type: 'expression', formula1: '=$G2=100', font_color: '#548235')
-```
-
-In progress (50%):
-```
-mcp__excel-mcp__conditionalformat(action: 'add-rule', session_id: '<id>', sheet_name: 'Schedule', range_address: 'A2:I{N+1}', rule_type: 'expression', formula1: '=$G2=50', interior_color: '#D6E4F0')
-```
-
-#### Step 9: Write Project Info sheet
-
-Same as `push` — project name, description, dates, assumptions.
-
-#### Step 10: Tab colors
-
-```
-mcp__excel-mcp__worksheet_style(action: 'set-tab-color', session_id: '<id>', sheet_name: 'Schedule', red: 84, green: 130, blue: 53)
-mcp__excel-mcp__worksheet_style(action: 'set-tab-color', session_id: '<id>', sheet_name: 'Project Info', red: 68, green: 114, blue: 196)
-```
-
-#### Step 11: Finalize
+#### Step 8: Finalize
 
 ```
 mcp__excel-mcp__calculation_mode(action: 'calculate', session_id: '<id>', scope: 'Workbook')
@@ -641,23 +630,23 @@ mcp__excel-mcp__calculation_mode(action: 'set-mode', session_id: '<id>', mode: '
 
 Screenshot for verification:
 ```
-mcp__excel-mcp__screenshot(action: 'capture-sheet', session_id: '<id>', sheet_name: 'Schedule', quality: 'Medium')
+mcp__excel-mcp__screenshot(action: 'capture-sheet', session_id: '<id>', sheet_name: 'Sheet1', quality: 'Medium')
 ```
 
-Present screenshot to user.
+Present screenshot to user. Verify: no ID column, real dates (not text), Predecessors with row numbers.
 
 ```
 mcp__excel-mcp__window(action: 'clear-status-bar', session_id: '<id>')
 mcp__excel-mcp__file(action: 'close', session_id: '<id>', save: true)
 ```
 
-#### Step 12: Update metadata
+#### Step 9: Update metadata
 
 Update `gantt-project.json`:
 - Set `metadata.lastSyncedToExcel` to current ISO 8601 timestamp
 - Set `metadata.lastModified` to current timestamp
 
-Report: "Pushed [N] tasks to [path] (MS Project format). Open in Project via File → Open to import with dependencies and durations intact."
+Report: "Pushed [N] tasks to [path] (MS Project format). Open in Project via File → Open. The Import Wizard will auto-map Name, Duration, Start, Finish, Predecessors, and Notes. After import, indent tasks to create outline hierarchy if desired."
 
 ---
 
