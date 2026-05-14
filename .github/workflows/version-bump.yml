@@ -15,6 +15,7 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       plugin_name: ${{ steps.version.outputs.plugin_name }}
       bumped: ${{ steps.version.outputs.bumped }}
+      release: ${{ steps.version.outputs.release }}
     steps:
       - uses: actions/checkout@v4
 
@@ -28,6 +29,7 @@ jobs:
           echo "plugin_name=$PLUGIN_NAME" >> "$GITHUB_OUTPUT"
 
           if echo "$COMMIT_MSG" | grep -q '\[release\]'; then
+            echo "release=true" >> "$GITHUB_OUTPUT"
             IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
             NEW_VERSION="$MAJOR.$MINOR.$((PATCH + 1))"
             echo "Release requested — bumping: $CURRENT -> $NEW_VERSION"
@@ -39,6 +41,7 @@ jobs:
             echo "No release tag — syncing current version: $CURRENT"
             echo "version=$CURRENT" >> "$GITHUB_OUTPUT"
             echo "bumped=false" >> "$GITHUB_OUTPUT"
+            echo "release=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Commit version bump
@@ -47,7 +50,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add .claude-plugin/plugin.json
-          git commit -m "[release] v${{ steps.version.outputs.version }}"
+          git commit -m "chore: bump version to v${{ steps.version.outputs.version }}"
           git push
 
       - name: Create version tag
@@ -58,6 +61,7 @@ jobs:
 
   notify-marketplace:
     needs: sync
+    if: needs.sync.outputs.release == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Dispatch to marketplace
