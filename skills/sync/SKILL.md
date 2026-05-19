@@ -14,7 +14,7 @@ Before any command, check that mpp-mcp tools are available. Look for the `mcp__m
 
 "mpp-mcp is not available in this session. Install it to enable .mpp sync: https://github.com/HurleySk/mpp-mcp"
 
-Also read `gantt-project.json` from the working directory. If missing, tell the user: "No project found. Run `/gantt:plan` to create one."
+Also read `gantt-project.json` from the working directory. If missing, tell the user: "No project found. Run `/gantt:init` to create one."
 
 ## Commands
 
