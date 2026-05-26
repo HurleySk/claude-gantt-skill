@@ -1,6 +1,6 @@
 ---
-name: init
-description: Use when starting a new project, building a work breakdown structure, or initializing project planning with iterative discovery. Conversational project init that works backwards from a deadline to decompose deliverables into sequenced tasks.
+name: kickoff
+description: Use when starting a new project, building a work breakdown structure, or initializing project planning with iterative discovery. Conversational project kickoff that works backwards from a deadline to decompose deliverables into sequenced tasks.
 argument-hint: "[new|resume|help]"
 ---
 
@@ -82,9 +82,9 @@ If resuming, assess what's missing (unestimated tasks, unwired dependencies, uns
 
 | Command | Description |
 |---------|-------------|
-| `/gantt:init` or `/gantt:init new` | Start a new project from scratch |
-| `/gantt:init resume` | Resume planning from existing gantt-project.json |
-| `/gantt:init help` | Show this help |
+| `/gantt:kickoff` or `/gantt:kickoff new` | Start a new project from scratch |
+| `/gantt:kickoff resume` | Resume planning from existing gantt-project.json |
+| `/gantt:kickoff help` | Show this help |
 
 **Related skills:**
 - `/gantt:schedule` — Date sequencing and analysis after planning
@@ -118,7 +118,7 @@ If resuming, assess what's missing (unestimated tasks, unwired dependencies, uns
     }
   ],
   "metadata": {
-    "createdBy": "gantt:init",
+    "createdBy": "gantt:kickoff",
     "createdAt": "ISO-8601",
     "lastModified": "ISO-8601",
     "engineVersion": "1.0.0",

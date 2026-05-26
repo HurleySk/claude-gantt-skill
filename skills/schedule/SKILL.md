@@ -16,7 +16,7 @@ Before any command, discover the engine:
 Glob for `gantt-engine.js` under the plugin directory (two levels up from this SKILL.md). Remember as $ENGINE.
 ```
 
-Read `gantt-project.json` from the working directory. If it doesn't exist, tell the user: "No project found. Run `/gantt:init` to create one."
+Read `gantt-project.json` from the working directory. If it doesn't exist, tell the user: "No project found. Run `/gantt:kickoff` to create one."
 
 ## Commands
 

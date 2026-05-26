@@ -1,11 +1,11 @@
 [
   {
-    "id": "gantt-init-suggest",
-    "skill": "gantt:init",
+    "id": "gantt-kickoff-suggest",
+    "skill": "gantt:kickoff",
     "triggers": ["project plan", "project init", "new project", "wbs", "work breakdown", "kickoff", "project scope"],
     "enforcement": "suggest",
     "sessionOnce": true,
-    "message": "Use /gantt:init for guided project planning with iterative discovery"
+    "message": "Use /gantt:kickoff for guided project planning with iterative discovery"
   },
   {
     "id": "gantt-schedule-suggest",

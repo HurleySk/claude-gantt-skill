@@ -21,14 +21,14 @@ claude plugin add HurleySk/claude-gantt-skill
 
 | Command | Description |
 |---------|-------------|
-| `/gantt:init` | Conversational project init — iterative discovery, WBS decomposition, feasibility checks |
+| `/gantt:kickoff` | Conversational project kickoff — iterative discovery, WBS decomposition, feasibility checks |
 | `/gantt:schedule [cmd]` | Date sequencing — `sequence`, `critical-path`, `feasibility`, `shift`, `add`, `remove`, `holidays` |
 | `/gantt:sync [cmd]` | MS Project bridge — `push`, `pull`, `status` (requires mpp-mcp) |
 | `/gantt:excel [cmd]` | Excel bridge — `push`, `pull`, `status`, `template` (requires excel-mcp) |
 
 ## How It Works
 
-1. **Plan** your project conversationally — `/gantt:init` walks backwards from your deadline, decomposes deliverables into tasks, wires dependencies, and checks feasibility
+1. **Plan** your project conversationally — `/gantt:kickoff` walks backwards from your deadline, decomposes deliverables into tasks, wires dependencies, and checks feasibility
 2. **Schedule** with precision — `/gantt:schedule sequence` runs a deterministic engine that computes dates (weekend and US federal holiday aware), resolves dependencies, and identifies the critical path
 3. **Sync** to MS Project — `/gantt:sync push` exports to `.mpp` via mpp-mcp (optional)
 4. **Export to Excel** — `/gantt:excel push` creates a formatted workbook with schedule table, project info, and optional Gantt chart visualization via excel-mcp
